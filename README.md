@@ -17,6 +17,29 @@ Centre Borelli, ENS Paris‑Saclay & Université de Reims
 This repository provides tools for detecting **methane digesters** in large-scale **RGB satellite imagery** using **part-based object detection** and for estimating geostatistical methane emissions.
 Our approach leverages **MMRotate** for rotated object detection, enabling robust detection across various resolutions and imaging modalities (SPOT, BDORTHO).
 
+---
+
+## **Architecture**
+
+The detection pipeline is **entirely CNN-based** — no Transformer structure is used.
+
+| Component | Type | Details |
+|-----------|------|---------|
+| **Backbone** | CNN | ResNet-50 (4 stages, pretrained on ImageNet via `torchvision://resnet50`) |
+| **Neck** | CNN | Feature Pyramid Network (FPN) with 5 output levels, channels: 256 → 256 |
+| **Detection Head** | CNN | Rotated FCOS (anchor-free) with 4 stacked convolutions per branch |
+| **Angle encoding** | — | `le90` convention via `DistanceAnglePointCoder` |
+| **Losses** | — | Focal Loss (classification), Rotated IoU Loss (regression), Binary Cross-Entropy (centerness) |
+| **Post-processing** | — | NMS per class → part-based scoring (Bivariate Poisson / histogram) |
+
+### How it works
+
+1. **Feature extraction (CNN backbone)** — A ResNet-50 extracts multi-scale feature maps at 4 pyramid levels. The first stage is frozen during training.
+2. **Feature aggregation (FPN neck)** — The FPN fuses features from all backbone levels into five scales (strides 8 – 128 px), allowing the model to detect objects of very different sizes.
+3. **Rotated detection (FCOS head)** — An anchor-free, fully-convolutional head predicts oriented bounding boxes (angle, x, y, w, h) and a centerness score for each spatial location, avoiding the need for hand-crafted anchors.
+4. **Part-based scoring** — Detections are classified into three categories: *biodigester* (whole site), *tank*, and *pile*. After class-wise NMS, a probabilistic scoring step (Bivariate Poisson or empirical histogram) combines the presence and confidence of sub-part detections inside each candidate site to suppress false alarms at scale.
+
+> **No Transformer/self-attention layers are used anywhere in the pipeline.** The entire model — backbone, neck, and detection head — is built exclusively from convolutional operations.
 
 ---
 
